@@ -3,10 +3,10 @@
 import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Line, PieChart, Pie, Cell, Legend } from 'recharts';
+import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { ArrowUpRight, ArrowDownRight, DollarSign, Award } from 'lucide-react';
-import { ChartTooltipContent, ChartContainer } from '@/components/ui/chart'; // Assuming chart tooltip is used
+import { ChartTooltipContent, ChartContainer, ChartTooltip } from '@/components/ui/chart'; // Added ChartTooltip import
 
 // Dummy Data - Replace with actual data fetching
 const monthlySummaryData = {
