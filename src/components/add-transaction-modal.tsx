@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format } from "date-fns"
-import { Calendar as CalendarIcon, PlusCircle } from "lucide-react"
+import { Calendar as CalendarIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -38,28 +38,48 @@ import {
 } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
-import { CategoryDropdown } from './category-dropdown'; // Assuming this component exists
+import { CategoryDropdown } from './category-dropdown';
 
-// Validation Schema
+// Type definitions matching page state
+type Category = {
+    id: string;
+    name: string;
+    type: 'expense' | 'income' | 'investment' | 'saving';
+};
+
+type Transaction = {
+    id: string;
+    date: string; // YYYY-MM-DD
+    amount: number;
+    category_id: string;
+    payment_method: string;
+    description?: string;
+};
+
+// Validation Schema - Align with Transaction type
 const transactionFormSchema = z.object({
   date: z.date({
     required_error: "A date is required.",
   }),
-  amount: z.coerce.number({ invalid_type_error: "Amount must be a number." }).positive("Amount must be positive for income/savings").or(z.coerce.number().negative("Amount must be negative for expenses")), // Allow positive or negative, refine later based on category type if needed
+  amount: z.coerce.number({ invalid_type_error: "Amount must be a number." })
+           .refine(val => val !== 0, { message: "Amount cannot be zero." }), // Ensure non-zero amount
   category_id: z.string().min(1, "Category is required."),
   payment_method: z.string().min(1, "Payment method is required."),
   description: z.string().optional(),
-})
+});
 
-type TransactionFormValues = z.infer<typeof transactionFormSchema>
+// Infer type from Zod schema, excluding the 'id' which is handled separately
+type TransactionFormValues = Omit<Transaction, 'id' | 'date'> & { date: Date };
+
 
 interface AddTransactionModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: TransactionFormValues) => void
-  categories: { id: string; name: string; type: string }[] // Pass categories for the dropdown
+  onSave: (data: Transaction | Omit<Transaction, 'id'>) => void // Adjusted to handle both add and edit
+  categories: Category[]
   paymentMethods: { [key: string]: string }
-  transactionData?: any // Optional data for editing
+  transactionData?: Transaction | null // Use Transaction type for editing data
+  onAddNewCategory: (name: string, type?: Category['type']) => string; // Callback to add category and get ID
 }
 
 export function AddTransactionModal({
@@ -69,64 +89,74 @@ export function AddTransactionModal({
   categories,
   paymentMethods,
   transactionData,
+  onAddNewCategory,
 }: AddTransactionModalProps) {
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
-    defaultValues: {
-      date: transactionData?.date ? new Date(transactionData.date) : new Date(),
-      amount: transactionData?.amount ?? undefined, // Use undefined for placeholder
-      category_id: transactionData?.category_id ?? '', // Assuming category is passed by ID if editing
-      payment_method: transactionData?.paymentMethod ?? '',
-      description: transactionData?.description ?? '',
-    },
-  })
+    // Set default values based on whether we are editing or adding
+    defaultValues: transactionData
+      ? {
+          date: new Date(transactionData.date + 'T00:00:00'), // Parse string date
+          amount: transactionData.amount,
+          category_id: transactionData.category_id,
+          payment_method: transactionData.payment_method,
+          description: transactionData.description ?? '',
+        }
+      : {
+          date: new Date(),
+          amount: undefined, // Use undefined for placeholder to show
+          category_id: '',
+          payment_method: '',
+          description: '',
+        },
+  });
 
+  // Reset form when transactionData changes (e.g., opening modal for edit/add)
   React.useEffect(() => {
-    if (transactionData) {
-       // Find category ID based on name if necessary, or assume ID is passed
-       const category = categories.find(c => c.name === transactionData.category);
-      form.reset({
-        date: new Date(transactionData.date),
-        amount: transactionData.amount,
-        category_id: category?.id ?? '', // Reset with the ID
-        payment_method: transactionData.paymentMethod,
-        description: transactionData.description,
-      });
-    } else {
-      form.reset({ // Reset to default empty state when adding new
-        date: new Date(),
-        amount: undefined,
-        category_id: '',
-        payment_method: '',
-        description: '',
-      });
+    if (isOpen) {
+      if (transactionData) {
+        form.reset({
+          date: new Date(transactionData.date + 'T00:00:00'),
+          amount: transactionData.amount,
+          category_id: transactionData.category_id,
+          payment_method: transactionData.payment_method,
+          description: transactionData.description ?? '',
+        });
+      } else {
+        form.reset({
+          date: new Date(),
+          amount: undefined,
+          category_id: '',
+          payment_method: '',
+          description: '',
+        });
+      }
     }
-  }, [transactionData, form, categories]);
+  }, [transactionData, isOpen, form]);
 
 
   const onSubmit = (data: TransactionFormValues) => {
-     // Map category ID back to name if needed by parent, or adjust parent to accept ID
-     const categoryName = categories.find(c => c.id === data.category_id)?.name;
-     const saveData = {
+     const formattedDate = format(data.date, 'yyyy-MM-dd'); // Format date to string
+     const saveData: Transaction | Omit<Transaction, 'id'> = {
          ...data,
-         id: transactionData?.id, // Include ID if editing
-         category: categoryName, // Pass name back for display consistency, adjust if needed
-         date: format(data.date, 'yyyy-MM-dd'), // Format date before saving
+         date: formattedDate,
+         description: data.description?.trim() || undefined, // Save undefined if empty/whitespace
+         ...(transactionData && { id: transactionData.id }), // Include ID only if editing
      };
-    onSave(saveData as any); // Cast needed if structure differs slightly
-    onClose(); // Close modal after saving
-  }
+     onSave(saveData);
+     onClose(); // Close modal after saving
+  };
 
-  const handleAddNewCategory = (newCategoryName: string) => {
-      // TODO: Implement API call to add category and update the categories list
-      console.log("Add new category:", newCategoryName);
-      // Example: Update state/refetch categories
-      // For now, just log it.
-      alert(`"${newCategoryName}" category added (simulated). Refresh needed to see in list.`);
-  }
+  // Handler for the CategoryDropdown's add functionality
+  const handleDropdownAddNewCategory = (newCategoryName: string) => {
+       // For simplicity, default new categories to 'expense'. Could add a type selector if needed.
+       const newCategoryId = onAddNewCategory(newCategoryName, 'expense');
+       // Automatically select the newly added category in the form
+       form.setValue('category_id', newCategoryId, { shouldValidate: true });
+   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{transactionData ? 'Edit Transaction' : 'Add New Transaction'}</DialogTitle>
@@ -148,12 +178,12 @@ export function AddTransactionModal({
                            <Button
                              variant={"outline"}
                              className={cn(
-                               "w-full pl-3 text-left font-normal",
+                               "w-full justify-start text-left font-normal",
                                !field.value && "text-muted-foreground"
                              )}
                            >
                              {field.value ? (
-                               format(field.value, "PPP")
+                               format(field.value, "PPP") // Format for display: e.g., Jun 15th, 2024
                              ) : (
                                <span>Pick a date</span>
                              )}
@@ -185,7 +215,26 @@ export function AddTransactionModal({
                 <FormItem>
                   <FormLabel>Amount (R$)</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="e.g., -55.30 or 3500.00" {...field} />
+                     {/* Use text input for better control over positive/negative */}
+                    <Input
+                        type="text"
+                        placeholder="e.g., -55.30 or 3500.00"
+                        {...field}
+                        onChange={(e) => {
+                           // Allow only numbers, minus sign at the start, and one decimal point
+                           const value = e.target.value;
+                           if (/^-?\d*\.?\d{0,2}$/.test(value) || value === '' || value === '-') {
+                             field.onChange(value); // Store as string temporarily
+                           }
+                         }}
+                         onBlur={(e) => {
+                            // Convert to number on blur for validation
+                            field.onChange(parseFloat(e.target.value) || 0);
+                            field.onBlur(); // Trigger validation
+                         }}
+                         // Display the numeric value from the form state if it exists
+                         value={field.value === undefined ? '' : String(field.value)}
+                       />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -202,7 +251,7 @@ export function AddTransactionModal({
                        categories={categories}
                        value={field.value}
                        onChange={field.onChange}
-                       onAddNewCategory={handleAddNewCategory}
+                       onAddNewCategory={handleDropdownAddNewCategory} // Use the specific handler
                      />
                    <FormMessage />
                  </FormItem>
@@ -216,7 +265,7 @@ export function AddTransactionModal({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Payment Method</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select payment method" />
@@ -244,6 +293,7 @@ export function AddTransactionModal({
                        placeholder="Add a short note..."
                        className="resize-none"
                        {...field}
+                       value={field.value ?? ''} // Ensure value is never null/undefined for textarea
                      />
                    </FormControl>
                    <FormMessage />
@@ -264,4 +314,3 @@ export function AddTransactionModal({
     </Dialog>
   )
 }
-

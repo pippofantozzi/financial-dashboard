@@ -11,26 +11,33 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { v4 as uuidv4 } from 'uuid'; // Use uuid for unique IDs
 
-// Dummy Data - Replace with actual data fetching and state management (e.g., useCategories hook)
-const dummyCategories = [
-    { id: 'cat1', name: 'Mercado', type: 'expense' },
-    { id: 'cat2', name: 'Luxos', type: 'expense' },
-    { id: 'cat3', name: 'Farmácia', type: 'expense' },
-    { id: 'cat4', name: 'Transporte', type: 'expense' },
-    { id: 'cat5', name: 'Salário', type: 'income' },
-    { id: 'cat6', name: 'Investimentos', type: 'investment' },
-    { id: 'cat7', name: 'Poupança Viagem', type: 'saving' },
+// Initial Dummy Data - Will be managed by state
+const initialCategories = [
+    { id: uuidv4(), name: 'Mercado', type: 'expense' },
+    { id: uuidv4(), name: 'Luxos', type: 'expense' },
+    { id: uuidv4(), name: 'Farmácia', type: 'expense' },
+    { id: uuidv4(), name: 'Transporte', type: 'expense' },
+    { id: uuidv4(), name: 'Salário', type: 'income' },
+    { id: uuidv4(), name: 'Investimentos', type: 'investment' },
+    { id: uuidv4(), name: 'Poupança Viagem', type: 'saving' },
 ];
 
-const categoryTypes = ['expense', 'income', 'investment', 'saving'];
+type Category = {
+    id: string;
+    name: string;
+    type: 'expense' | 'income' | 'investment' | 'saving';
+};
+
+const categoryTypes: Category['type'][] = ['expense', 'income', 'investment', 'saving'];
 
 export default function CategoriesPage() {
-    const [categories, setCategories] = React.useState(dummyCategories); // TODO: Replace with useCategories hook
+    const [categories, setCategories] = React.useState<Category[]>(initialCategories); // Manage categories in state
     const [isModalOpen, setIsModalOpen] = React.useState(false);
-    const [editingCategory, setEditingCategory] = React.useState<any>(null);
+    const [editingCategory, setEditingCategory] = React.useState<Category | null>(null);
     const [newCategoryName, setNewCategoryName] = React.useState('');
-    const [newCategoryType, setNewCategoryType] = React.useState<string>('expense');
+    const [newCategoryType, setNewCategoryType] = React.useState<Category['type']>('expense');
     const { toast } = useToast();
 
     const openAddModal = () => {
@@ -40,7 +47,7 @@ export default function CategoriesPage() {
         setIsModalOpen(true);
     };
 
-    const openEditModal = (category: any) => {
+    const openEditModal = (category: Category) => {
         setEditingCategory(category);
         setNewCategoryName(category.name);
         setNewCategoryType(category.type);
@@ -54,27 +61,30 @@ export default function CategoriesPage() {
          }
 
         if (editingCategory) {
-            // TODO: Implement API call to update category
-            console.log('Updating category:', { ...editingCategory, name: newCategoryName, type: newCategoryType });
-            setCategories(prev => prev.map(cat => cat.id === editingCategory.id ? { ...cat, name: newCategoryName, type: newCategoryType } : cat));
-            toast({ title: "Category Updated", description: `Category "${newCategoryName}" has been updated.` });
+            // Update existing category in state
+            setCategories(prev => prev.map(cat =>
+                cat.id === editingCategory.id ? { ...cat, name: newCategoryName.trim(), type: newCategoryType } : cat
+            ));
+            toast({ title: "Category Updated", description: `Category "${newCategoryName.trim()}" has been updated.` });
         } else {
-            // TODO: Implement API call to add new category
-             const newId = `cat${Date.now()}`; // Dummy ID
-             console.log('Adding category:', { id: newId, name: newCategoryName, type: newCategoryType });
-             setCategories(prev => [...prev, { id: newId, name: newCategoryName, type: newCategoryType }]);
-             toast({ title: "Category Added", description: `Category "${newCategoryName}" has been added.` });
+            // Add new category to state
+             const newCategory: Category = {
+                 id: uuidv4(), // Generate unique ID
+                 name: newCategoryName.trim(),
+                 type: newCategoryType,
+             };
+             setCategories(prev => [...prev, newCategory]);
+             toast({ title: "Category Added", description: `Category "${newCategoryName.trim()}" has been added.` });
         }
         setIsModalOpen(false);
     };
 
     const handleDeleteCategory = (id: string, name: string) => {
-        // TODO: Add check if category is in use before deleting
-         if (window.confirm(`Are you sure you want to delete the category "${name}"? This might affect existing transactions.`)) {
-            // TODO: Implement API call to delete category
-            console.log('Deleting category:', id);
+        // TODO: Add check if category is in use by transactions before deleting (when transaction state is available)
+         if (window.confirm(`Are you sure you want to delete the category "${name}"? This action cannot be undone.`)) {
+            // Delete category from state
             setCategories(prev => prev.filter(cat => cat.id !== id));
-             toast({ title: "Category Deleted", description: `Category "${name}" has been deleted.` });
+            toast({ title: "Category Deleted", description: `Category "${name}" has been deleted.` });
          }
     };
 
@@ -157,7 +167,7 @@ export default function CategoriesPage() {
                             <Label htmlFor="category-type" className="text-right">
                                 Type
                             </Label>
-                            <Select value={newCategoryType} onValueChange={setNewCategoryType}>
+                            <Select value={newCategoryType} onValueChange={(value) => setNewCategoryType(value as Category['type'])}>
                                 <SelectTrigger id="category-type" className="col-span-3">
                                     <SelectValue placeholder="Select type" />
                                 </SelectTrigger>
@@ -180,5 +190,3 @@ export default function CategoriesPage() {
         </div>
     );
 }
-
-       
