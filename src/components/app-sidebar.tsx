@@ -12,25 +12,17 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
   SidebarSeparator,
-  SidebarGroup,
-  SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import {
   LayoutDashboard,
   ReceiptText,
-  CalendarClock,
   PiggyBank,
   BookOpenCheck,
   Settings,
-  FileUp,
   LogOut, // Assuming Clerk will handle logout
   Tags,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 
@@ -38,24 +30,20 @@ export function AppSidebar() {
   const pathname = usePathname();
 
   const isActive = (path: string) => {
-    return pathname === path;
+    // Handle potential trailing slashes or query params if needed
+    return pathname === path || pathname.startsWith(path + '/');
   };
 
   return (
     <Sidebar collapsible="icon" variant="inset" side="left">
       <SidebarHeader className="items-center justify-between gap-0">
         <div className="flex items-center gap-2 p-2 [&>span]:hidden group-data-[collapsible=icon]:[&>span]:flex">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="size-6 text-primary"
-          >
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z" />
-          </svg>
+          {/* Simple SVG Placeholder for FinanceFlow Logo */}
+           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-6 text-primary">
+              <path fillRule="evenodd" d="M2.25 6a3 3 0 013-3h13.5a3 3 0 013 3v12a3 3 0 01-3 3H5.25a3 3 0 01-3-3V6zm18 3H3.75v9a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5V9zm-15-3.75a.75.75 0 00-.75.75v.75c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-.75a.75.75 0 00-.75-.75H5.25z" clipRule="evenodd" />
+           </svg>
           <span className="font-semibold">FinanceFlow</span>
         </div>
-        {/* Mobile trigger is inside SidebarInset, but desktop trigger can be here */}
         <SidebarTrigger className="hidden md:flex" />
       </SidebarHeader>
 
@@ -85,18 +73,7 @@ export function AppSidebar() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={isActive('/current-month')}
-              tooltip="Current Month / Upload"
-            >
-              <Link href="/current-month">
-                <FileUp />
-                <span>Upload Extrato</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {/* Removed Upload Extrato Link */}
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
@@ -105,7 +82,7 @@ export function AppSidebar() {
             >
               <Link href="/savings">
                 <PiggyBank />
-                <span>Savings</span>
+                <span>Savings Goals</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -137,7 +114,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-2">
-         {/* Placeholder for User Profile - Assuming Clerk provides user info */}
+         {/* Placeholder for User Profile */}
          <div className="flex items-center gap-2 p-2">
            <Avatar className="h-8 w-8">
              <AvatarImage src="https://picsum.photos/40/40" alt="User Avatar" />
@@ -156,7 +133,7 @@ export function AppSidebar() {
                <span>Settings</span>
              </SidebarMenuButton>
            </SidebarMenuItem>
-           {/* Add Logout Button - Integration with Clerk needed */}
+           {/* Add Logout Button - Integration with Clerk/Auth needed */}
            <SidebarMenuItem>
              <SidebarMenuButton tooltip="Logout">
                <LogOut />

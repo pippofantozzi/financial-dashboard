@@ -11,38 +11,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/components/ui/input'; // Keep input if needed elsewhere
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePickerWithRange } from '@/components/date-picker-range';
 import { AddTransactionModal } from '@/components/add-transaction-modal';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Import Card components
-import { PlusCircle, Filter, Edit, Trash2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PlusCircle, Filter, Edit, Trash2, Upload } from 'lucide-react';
 import type { DateRange } from "react-day-picker"
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
 
-// Initial Dummy Data - Managed by state
-const initialCategories = [
-    { id: uuidv4(), name: 'Mercado', type: 'expense' },
-    { id: uuidv4(), name: 'Luxos', type: 'expense' },
-    { id: uuidv4(), name: 'Farmácia', type: 'expense' },
-    { id: uuidv4(), name: 'Transporte', type: 'expense' },
-    { id: uuidv4(), name: 'Salário', type: 'income' },
-    { id: uuidv4(), name: 'Investimentos', type: 'investment' },
-    { id: uuidv4(), name: 'Poupança Viagem', type: 'saving' },
-];
-
-const initialTransactions = [
-  { id: uuidv4(), date: '2024-06-15', amount: -55.30, category_id: initialCategories[0].id, payment_method: 'db', description: 'Groceries at Pão de Açúcar' },
-  { id: uuidv4(), date: '2024-06-14', amount: -120.00, category_id: initialCategories[1].id, payment_method: 'cg', description: 'Dinner at Outback' },
-  { id: uuidv4(), date: '2024-06-13', amount: 3500.00, category_id: initialCategories[4].id, payment_method: 'pb', description: 'Monthly Salary' },
-  { id: uuidv4(), date: '2024-06-12', amount: -35.80, category_id: initialCategories[2].id, payment_method: 'db', description: 'Medicine at Droga Raia' },
-  { id: uuidv4(), date: '2024-06-10', amount: -70.00, category_id: initialCategories[3].id, payment_method: 'dg', description: 'Uber rides' },
-];
-
-
+// --- State Definitions --- moved outside component for potential future context/sharing
 type Category = {
     id: string;
     name: string;
@@ -63,9 +44,32 @@ const paymentMethodMap = {
     pb: 'PIX/Boleto',
     cg: 'Crédito',
     dg: 'Dinheiro',
+    other: 'Outro', // Added 'other' for uploaded data
 };
 
 type PaymentMethodKey = keyof typeof paymentMethodMap;
+
+
+// Initial Dummy Data - Managed by state
+const initialCategories: Category[] = [
+    { id: 'cat-mercado', name: 'Mercado', type: 'expense' },
+    { id: 'cat-luxos', name: 'Luxos', type: 'expense' },
+    { id: 'cat-farmacia', name: 'Farmácia', type: 'expense' },
+    { id: 'cat-transporte', name: 'Transporte', type: 'expense' },
+    { id: 'cat-salario', name: 'Salário', type: 'income' },
+    { id: 'cat-invest', name: 'Investimentos', type: 'investment' },
+    { id: 'cat-poupanca', name: 'Poupança Viagem', type: 'saving' },
+    { id: 'cat-uncat', name: 'Uncategorized', type: 'expense' }, // Default for uploads?
+];
+
+const initialTransactions: Transaction[] = [
+  { id: uuidv4(), date: '2024-06-15', amount: -55.30, category_id: 'cat-mercado', payment_method: 'db', description: 'Groceries at Pão de Açúcar' },
+  { id: uuidv4(), date: '2024-06-14', amount: -120.00, category_id: 'cat-luxos', payment_method: 'cg', description: 'Dinner at Outback' },
+  { id: uuidv4(), date: '2024-06-13', amount: 3500.00, category_id: 'cat-salario', payment_method: 'pb', description: 'Monthly Salary' },
+  { id: uuidv4(), date: '2024-06-12', amount: -35.80, category_id: 'cat-farmacia', payment_method: 'db', description: 'Medicine at Droga Raia' },
+  { id: uuidv4(), date: '2024-06-10', amount: -70.00, category_id: 'cat-transporte', payment_method: 'dg', description: 'Uber rides' },
+];
+// --- End State Definitions ---
 
 
 export default function TransactionsPage() {
@@ -74,6 +78,7 @@ export default function TransactionsPage() {
   const [categories, setCategories] = React.useState<Category[]>(initialCategories);
   const [editingTransaction, setEditingTransaction] = React.useState<Transaction | null>(null);
   const { toast } = useToast();
+  const fileInputRef = React.useRef<HTMLInputElement>(null); // Ref for file input
 
   // Filters State
   const [categoryFilter, setCategoryFilter] = React.useState<string>('all');
@@ -127,21 +132,93 @@ export default function TransactionsPage() {
    };
 
    // Handler for adding new categories directly from the modal dropdown
-   const handleAddNewCategory = (newCategoryName: string, type: Category['type'] = 'expense') => {
-       const newCategory: Category = { id: uuidv4(), name: newCategoryName.trim(), type };
+   const handleAddNewCategory = (newCategoryName: string, type: Category['type'] = 'expense'): string => {
+       const trimmedName = newCategoryName.trim();
+        const exists = categories.some(cat => cat.name.toLowerCase() === trimmedName.toLowerCase());
+        if (exists) {
+            toast({ title: "Category Exists", description: `Category "${trimmedName}" already exists. Use existing category.`, variant: "default" });
+            return categories.find(cat => cat.name.toLowerCase() === trimmedName.toLowerCase())!.id; // Return existing ID
+        }
+       const newCategory: Category = { id: uuidv4(), name: trimmedName, type };
        setCategories(prev => [...prev, newCategory]);
        toast({ title: "Category Added", description: `Category "${newCategory.name}" created.` });
        return newCategory.id; // Return the new ID so the modal can select it
    };
+
+   // --- Upload Functionality ---
+   const handleUploadClick = () => {
+      fileInputRef.current?.click();
+   };
+
+   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+         // Simple validation for allowed types
+         const allowedTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv', 'application/pdf'];
+         if (allowedTypes.includes(file.type)) {
+            toast({
+               title: "File Selected",
+               description: `${file.name} selected. Adding dummy data...`, // Simulate processing
+            });
+            // ** SIMULATE adding dummy data **
+            addDummyTransactions();
+         } else {
+            toast({
+               title: "Invalid File Type",
+               description: "Please upload an XLSX, CSV, or PDF file.",
+               variant: "destructive",
+            });
+         }
+         // Reset file input to allow uploading the same file again if needed
+         if (fileInputRef.current) {
+             fileInputRef.current.value = '';
+         }
+      }
+   };
+
+   const addDummyTransactions = () => {
+      const uncategorizedId = categories.find(c => c.name === 'Uncategorized')?.id ?? 'cat-uncat';
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const dummyRows: Transaction[] = [
+        { id: uuidv4(), date: today, amount: -25.50, category_id: uncategorizedId, payment_method: 'other', description: 'Uploaded Item 1' },
+        { id: uuidv4(), date: today, amount: 100.00, category_id: uncategorizedId, payment_method: 'other', description: 'Uploaded Deposit A' },
+        { id: uuidv4(), date: today, amount: -42.00, category_id: uncategorizedId, payment_method: 'other', description: 'Uploaded Service B' },
+        { id: uuidv4(), date: today, amount: -9.99, category_id: uncategorizedId, payment_method: 'other', description: 'Online Sub C' },
+        { id: uuidv4(), date: today, amount: -150.75, category_id: uncategorizedId, payment_method: 'other', description: 'Big Purchase D' },
+      ];
+
+      setTransactions(prev => [...dummyRows, ...prev]); // Add new dummy rows to the top
+      toast({
+         title: "Dummy Data Added",
+         description: "5 dummy transactions added. Please categorize them.",
+         variant: "default",
+      });
+   };
+   // --- End Upload Functionality ---
 
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Transactions</h1>
-        <Button onClick={() => { setEditingTransaction(null); setIsModalOpen(true); }}>
-          <PlusCircle className="mr-2 h-4 w-4" /> Add Transaction
-        </Button>
+         <div className="flex gap-2">
+             {/* Hidden file input */}
+             <Input
+               ref={fileInputRef}
+               type="file"
+               accept=".xlsx,.csv,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/pdf"
+               onChange={handleFileChange}
+               className="hidden"
+               id="file-upload"
+             />
+             {/* Visible Upload Button */}
+             <Button variant="outline" onClick={handleUploadClick}>
+                <Upload className="mr-2 h-4 w-4" /> Upload Data
+             </Button>
+            <Button onClick={() => { setEditingTransaction(null); setIsModalOpen(true); }}>
+               <PlusCircle className="mr-2 h-4 w-4" /> Add Transaction
+            </Button>
+         </div>
       </div>
 
       {/* Filters */}
