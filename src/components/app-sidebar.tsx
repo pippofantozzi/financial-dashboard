@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -32,7 +31,7 @@ import { Button } from '@/components/ui/button'; // Import Button for the trigge
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { state: sidebarState, toggleSidebar, isMobile } = useSidebar(); // Get sidebar state and toggle function
+  const { state: sidebarState, toggleSidebar, isMobile, expandSidebar, collapseSidebar } = useSidebar(); // Get sidebar state and toggle function
 
   const isActive = (path: string) => {
     // Handle potential trailing slashes or query params if needed
@@ -72,7 +71,13 @@ export function AppSidebar() {
 
   return (
     // Use the Sidebar component which handles state internally via context
-    <Sidebar collapsible={isMobile ? "offcanvas" : "icon"} variant="inset" side="left">
+    <Sidebar
+       collapsible={isMobile ? "offcanvas" : "icon"}
+       variant="inset"
+       side="left"
+       onMouseEnter={expandSidebar} // Expand on hover
+       onMouseLeave={collapseSidebar} // Collapse on leave
+    >
         {/* Header remains similar, but relies on context for state */}
       <SidebarHeader className="items-center justify-between gap-2 p-2 pr-1">
          {/* Logo and Title Area */}
@@ -85,7 +90,6 @@ export function AppSidebar() {
                variant="ghost"
                size="icon"
                className="h-7 w-7 shrink-0"
-               onClick={toggleSidebar}
                aria-label="Toggle Sidebar"
             >
                 <PanelLeft className="h-4 w-4"/>

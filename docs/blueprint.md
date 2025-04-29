@@ -121,6 +121,16 @@ An interactive finance dashboard where she:
 - **Monthly TL;DR** section
 - Button: **Full Report** → opens Sidebar
 
+#### Current Chart Data Flow (Implementation Note - 28 Apr 2025):
+- **Data Source:** Currently, all financial data (`transactions`, `categories`, `savingsGoals`, `monthlyBudget`) is **hardcoded as initial state** within the `src/app/dashboard/page.tsx` component. No external data fetching (e.g., from Supabase) is implemented yet.
+- **Data Processing:**
+    - The `calculateMonthlyData` helper function in `src/app/dashboard/page.tsx` takes the hardcoded data.
+    - It groups transactions by month, calculates monthly income/expenses, aggregates expenses by category, and computes a running net worth.
+    - This processed data is stored using `React.useMemo` for efficiency.
+- **Chart-Specific Preparation:**
+    - **Expenses vs Budget:** The card compares `latestMonthData.expenses` (derived from `calculateMonthlyData`) against the `monthlyBudget` state variable.
+    - **Expenses Pie Chart:** The `expenseBreakdown` variable (derived from the monthly expense category aggregation in `calculateMonthlyData`) is passed to the `recharts` PieChart component. Colors are generated dynamically by the `chartConfigPie` function.
+
 ---
 
 ### 3. **Transactions Page**

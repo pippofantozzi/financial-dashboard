@@ -34,6 +34,8 @@ type SidebarContext = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  expandSidebar: () => void
+  collapseSidebar: () => void
 }
 
 const SidebarContext = React.createContext<SidebarContext | null>(null)
@@ -89,6 +91,19 @@ const SidebarProvider = React.forwardRef<
       [setOpenProp, open]
     )
 
+    // Helper functions for explicit control (for hover)
+    const expandSidebar = React.useCallback(() => {
+      if (!isMobile) {
+        setOpen(true)
+      }
+    }, [isMobile, setOpen])
+
+    const collapseSidebar = React.useCallback(() => {
+      if (!isMobile) {
+        setOpen(false)
+      }
+    }, [isMobile, setOpen])
+
     // Helper to toggle the sidebar.
     const toggleSidebar = React.useCallback(() => {
       return isMobile
@@ -125,8 +140,20 @@ const SidebarProvider = React.forwardRef<
         openMobile,
         setOpenMobile,
         toggleSidebar,
+        expandSidebar,
+        collapseSidebar,
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+      [
+        state,
+        open,
+        setOpen,
+        isMobile,
+        openMobile,
+        setOpenMobile,
+        toggleSidebar,
+        expandSidebar,
+        collapseSidebar,
+      ]
     )
 
     return (
