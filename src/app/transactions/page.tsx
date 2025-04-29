@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePickerWithRange } from '@/components/date-picker-range';
 import { AddTransactionModal } from '@/components/add-transaction-modal';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Import Card components
 import { PlusCircle, Filter, Edit, Trash2 } from 'lucide-react';
 import type { DateRange } from "react-day-picker"
 import { v4 as uuidv4 } from 'uuid';
@@ -205,8 +206,8 @@ export default function TransactionsPage() {
                         <TableCell className="font-medium">{transaction.description || '-'}</TableCell>
                         <TableCell>{getCategoryName(transaction.category_id)}</TableCell>
                         <TableCell>{paymentMethodMap[transaction.payment_method as PaymentMethodKey] || transaction.payment_method}</TableCell>
-                        <TableCell className={`text-right font-semibold ${transaction.amount >= 0 ? 'text-accent-foreground' : 'text-destructive'}`}>
-                          R$ {transaction.amount.toFixed(2)}
+                        <TableCell className={`text-right font-semibold ${transaction.amount >= 0 ? 'text-green-600' : 'text-destructive'}`}>
+                           R$ {transaction.amount.toFixed(2)}
                         </TableCell>
                          <TableCell className="text-center space-x-1">
                            <Button variant="ghost" size="icon" onClick={() => handleEditTransaction(transaction)}>
