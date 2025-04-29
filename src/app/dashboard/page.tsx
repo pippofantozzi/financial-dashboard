@@ -6,12 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Line, ReferenceLine, PieChart, Pie, Cell, Legend, Tooltip as RechartsTooltip } from 'recharts';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUpRight, ArrowDownRight, DollarSign, Award, TrendingUp, TrendingDown, Settings } from 'lucide-react';
-import { ChartContainer } from '@/components/ui/chart';
+import { ArrowUpRight, ArrowDownRight, DollarSign, Award, TrendingUp, TrendingDown, Settings, PieChart as PieChartIcon } from 'lucide-react';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // For chart toggle
 import { Input } from '@/components/ui/input'; // For budget setting
 import { Label } from '@/components/ui/label'; // For budget setting label
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog'; // For budget setting modal
+import { format, parseISO, getMonth, getYear, lastDayOfMonth } from 'date-fns';
 
 // --- State Definitions (Simulated - Replace with global state/context) ---
 type Transaction = {
@@ -49,10 +50,22 @@ const initialCategories: Category[] = [
     { id: 'cat-poupanca', name: 'Poupança Viagem', type: 'saving' },
     { id: 'cat-uncat', name: 'Uncategorized', type: 'expense' },
     { id: 'cat-freela', name: 'Freelance Income', type: 'income' },
-    { id: 'cat-other-exp', name: 'Outros', type: 'expense' }, // Added for expense chart
+    { id: 'cat-other-exp', name: 'Outros', type: 'expense' },
+    { id: 'cat-rent', name: 'Rent', type: 'expense' },
+    { id: 'cat-utilities', name: 'Utilities', type: 'expense' },
+    { id: 'cat-dining', name: 'Dining Out', type: 'expense' },
 ];
 
 const initialTransactions: Transaction[] = [
+  // July (Current Month)
+  { id: 't-july1', date: '2024-07-05', amount: -85.50, category_id: 'cat-mercado', payment_method: 'db' },
+  { id: 't-july2', date: '2024-07-03', amount: -1200.00, category_id: 'cat-rent', payment_method: 'pb' },
+  { id: 't-july3', date: '2024-07-02', amount: -75.00, category_id: 'cat-dining', payment_method: 'cg' },
+  { id: 't-july4', date: '2024-07-01', amount: -150.00, category_id: 'cat-utilities', payment_method: 'pb' },
+  { id: 't-july5', date: '2024-07-06', amount: 3800.00, category_id: 'cat-salario', payment_method: 'pb' },
+  { id: 't-july6', date: '2024-07-08', amount: -40.00, category_id: 'cat-transporte', payment_method: 'dg' },
+  { id: 't-july7', date: '2024-07-10', amount: -60.00, category_id: 'cat-luxos', payment_method: 'cg' },
+  { id: 't-july8', date: '2024-07-12', amount: -25.00, category_id: 'cat-farmacia', payment_method: 'db' },
   // June
   { id: 't1', date: '2024-06-15', amount: -55.30, category_id: 'cat-mercado', payment_method: 'db' },
   { id: 't2', date: '2024-06-14', amount: -120.00, category_id: 'cat-luxos', payment_method: 'cg' },
@@ -88,27 +101,48 @@ const initialSavingsGoals: SavingsGoal[] = [
 // --- Helper Functions ---
 const calculateUnallocatedCash = (transactions: Transaction[], goals: SavingsGoal[], categories: Category[]): number => {
    const totalIncome = transactions
-       .filter(tx => tx.amount > 0)
+       .filter(tx => {
+           const category = categories.find(c => c.id === tx.category_id);
+           return category?.type === 'income' || tx.amount > 0; // Count explicit income categories or any positive amount
+       })
        .reduce((sum, tx) => sum + tx.amount, 0);
 
-   // Sum expenses NOT linked to goals + amounts explicitly saved/invested in goals
-   const totalExpenses = transactions
-       .filter(tx => tx.amount < 0 && !tx.allocated_to_goal_id)
+   // Sum expenses: category type 'expense' AND amount is negative
+   const totalGeneralExpenses = transactions
+       .filter(tx => {
+           const category = categories.find(c => c.id === tx.category_id);
+           // Count if explicitly 'expense' type AND negative amount
+           return category?.type === 'expense' && tx.amount < 0;
+       })
        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
+   // Sum outflows categorized as 'investment' or 'saving' AND negative amount, NOT already linked to a goal
+   const totalUnallocatedSavingsInvestments = transactions
+       .filter(tx => {
+            const category = categories.find(c => c.id === tx.category_id);
+            return category && (category.type === 'investment' || category.type === 'saving') && tx.amount < 0 && !tx.allocated_to_goal_id;
+        })
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
+    // Sum outflows with UNKNOWN category and negative amount
+    const totalUncategorizedExpenses = transactions
+        .filter(tx => !categories.some(c => c.id === tx.category_id) && tx.amount < 0)
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
 
    const totalManuallySavedInGoals = goals.reduce((sum, goal) => sum + goal.amount_saved, 0);
 
-   const netUnallocated = totalIncome - totalExpenses - totalManuallySavedInGoals;
-   return Math.max(0, netUnallocated);
+   // Refined calculation: Income - (Expenses + Unallocated Savings/Investments + Uncategorized Expenses + Goal Allocations)
+   const netUnallocated = totalIncome - totalGeneralExpenses - totalUnallocatedSavingsInvestments - totalUncategorizedExpenses - totalManuallySavedInGoals;
+
+   return Math.max(0, netUnallocated); // Ensure non-negative result
 };
+
 
 const calculateMonthlyData = (transactions: Transaction[], categories: Category[], goals: SavingsGoal[]) => {
     const monthlyData: { [key: string]: { month: string; income: number; expenses: number; netWorth: number } } = {};
-    let cumulativeNetWorth = 0; // Start net worth calculation (simplified)
+    const monthlyExpenseByCategory: { [key: string]: { [categoryName: string]: number } } = {};
 
-    // Calculate initial unallocated cash - consider this as starting point before processing months
-    const initialUnallocated = calculateUnallocatedCash([], goals, categories); // Start with 0 transactions
-    cumulativeNetWorth += initialUnallocated + goals.reduce((sum, g) => sum + g.amount_saved, 0);
 
     // Group transactions by month (YYYY-MM)
     const transactionsByMonth: { [key: string]: Transaction[] } = {};
@@ -124,156 +158,142 @@ const calculateMonthlyData = (transactions: Transaction[], categories: Category[
     const sortedMonths = Object.keys(transactionsByMonth).sort();
 
     // Calculate net worth at the START of the first month with data
-    const firstMonthKey = sortedMonths[0];
-    if (firstMonthKey) {
-         const [year, monthNum] = firstMonthKey.split('-').map(Number);
-         const monthLabel = new Date(year, monthNum - 1).toLocaleString('default', { month: 'short' });
-          // Initialize net worth for the start of the period
-         monthlyData[`${monthLabel}-Start`] = {
-             month: `${monthLabel}-Start`,
-             income: 0,
-             expenses: 0,
-             netWorth: calculateUnallocatedCash([], goals, categories) + goals.reduce((sum, g) => sum + g.amount_saved, 0), // Initial net worth
-         };
-    }
+    const firstMonthKey = sortedMonths.length > 0 ? sortedMonths[0] : format(new Date(), 'yyyy-MM'); // Handle no transactions case
+    const firstMonthDate = parseISO(`${firstMonthKey}-01T00:00:00`);
+    const firstMonthLabel = format(firstMonthDate, 'MMM');
+    const initialGoalTotal = goals.reduce((sum, g) => sum + g.amount_saved, 0); // Initial goal state
+
+    // Calculate initial unallocated cash based on transactions BEFORE the first month
+     const transactionsBeforeFirstMonth = transactions.filter(tx => tx.date < `${firstMonthKey}-01`);
+     const initialUnallocated = calculateUnallocatedCash(transactionsBeforeFirstMonth, goals, categories);
+     const initialNetWorth = initialUnallocated + initialGoalTotal;
 
 
-    let runningUnallocated = calculateUnallocatedCash([], goals, categories);
-    let runningGoalTotal = goals.reduce((sum, g) => sum + g.amount_saved, 0);
+    monthlyData[`${firstMonthLabel}-Start`] = {
+         month: `${firstMonthLabel}-Start`,
+         income: 0,
+         expenses: 0,
+         netWorth: initialNetWorth,
+     };
+
+    let runningNetWorth = initialNetWorth; // Start with net worth before the first month's transactions
 
     sortedMonths.forEach(monthKey => {
-        const [year, monthNum] = monthKey.split('-').map(Number);
-        const monthLabel = new Date(year, monthNum - 1).toLocaleString('default', { month: 'short' }); // e.g., "Jan"
         const monthTransactions = transactionsByMonth[monthKey];
+        const monthDate = parseISO(`${monthKey}-01T00:00:00`);
+        const monthLabel = format(monthDate, 'MMM');
+
+        if (!monthlyData[monthLabel]) {
+           monthlyData[monthLabel] = { month: monthLabel, income: 0, expenses: 0, netWorth: runningNetWorth }; // Initialize with previous net worth
+           monthlyExpenseByCategory[monthKey] = {};
+         }
 
         let monthIncome = 0;
         let monthExpenses = 0;
 
         monthTransactions.forEach(tx => {
             const category = categories.find(c => c.id === tx.category_id);
-            if (tx.amount > 0) {
-                monthIncome += tx.amount;
-                runningUnallocated += tx.amount; // Income increases unallocated cash
-            } else {
-                 // Only count as expense if NOT allocated to a goal already accounted for
-                 if (!tx.allocated_to_goal_id) {
-                     monthExpenses += Math.abs(tx.amount);
-                     runningUnallocated -= Math.abs(tx.amount); // Expenses decrease unallocated cash
-                 } else {
-                     // If allocated, assume amount_saved in goal was updated elsewhere,
-                     // so the change in net worth is already reflected.
-                     // No change needed to runningUnallocated here if goal amount was updated.
-                     // This part needs careful handling based on how allocations are recorded.
-                     // For simplicity now, assume goal amount_saved is the source of truth.
-                 }
+            const amount = tx.amount;
 
-                 // If category is investment/saving and linked to goal, it's part of goal amount
-                 if (category && (category.type === 'investment' || category.type === 'saving') && tx.allocated_to_goal_id) {
-                    // This outflow is part of the goal's saved amount, not general expense
-                 } else if (tx.amount < 0) {
-                     // Count as expense if negative and not an explicit goal contribution
-                     monthExpenses += Math.abs(tx.amount);
-                 }
+            if (category?.type === 'income' || (!category && amount > 0)) {
+                monthIncome += amount;
+            } else if (category?.type === 'expense' || (!category && amount < 0)) {
+                 monthExpenses += Math.abs(amount);
+                 // Track expenses by category for the pie chart
+                 const catName = category?.name || 'Uncategorized';
+                 if (!monthlyExpenseByCategory[monthKey]) monthlyExpenseByCategory[monthKey] = {};
+                 monthlyExpenseByCategory[monthKey][catName] = (monthlyExpenseByCategory[monthKey][catName] || 0) + Math.abs(amount);
             }
+            // Savings/Investment categories contribute to net worth change but aren't typically 'expenses'
+            // unless we decide to track them that way for budgeting.
+            // The net worth calculation will implicitly handle them via the unallocated cash calculation at month end.
         });
 
-        // Recalculate total goal savings *at the end of the month* based on the goals state passed in
-        // This assumes the `goals` prop reflects the state *after* all transactions for the period.
-        const endOfMonthGoalTotal = initialSavingsGoals.reduce((sum, g) => sum + g.amount_saved, 0); // Use the initial state for calculation demo
+        // Net change for the month's transactions
+        const netChange = monthIncome - monthExpenses - monthTransactions
+            .filter(tx => {
+                const cat = categories.find(c => c.id === tx.category_id);
+                // Include savings/investments outflows in net change calculation
+                return cat && (cat.type === 'investment' || cat.type === 'saving') && tx.amount < 0;
+            })
+            .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
+        runningNetWorth += netChange; // Update running net worth based *only* on this month's transaction flows
 
-        // Net Worth at the end of the month = Current Unallocated Cash + Total Saved in Goals
-        // Recalculate unallocated cash at end of month for accuracy
-         const endOfMonthUnallocated = calculateUnallocatedCash(
-             transactions.filter(tx => tx.date <= `${monthKey}-31`), // Include all transactions up to this month end
-             initialSavingsGoals, // Use the LATEST goal state for end-of-month calculation
-             categories
-         );
-
-
-        monthlyData[monthLabel] = {
-            month: monthLabel,
-            income: monthIncome,
-            expenses: monthExpenses,
-            netWorth: endOfMonthUnallocated + endOfMonthGoalTotal,
-        };
+        // Update monthly data
+        monthlyData[monthLabel].income += monthIncome;
+        monthlyData[monthLabel].expenses += monthExpenses;
+        monthlyData[monthLabel].netWorth = runningNetWorth; // Set the end-of-month net worth
     });
 
+     // --- Fill Missing Months & Final Sort ---
+     const finalChartData = [];
+     const lastTxDate = transactions.length > 0 ? parseISO(transactions.sort((a,b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())[0].date + 'T00:00:00') : new Date();
+     let currentDate = transactions.length > 0 ? parseISO(sortedMonths[0] + '-01T00:00:00') : new Date(new Date().getFullYear(), 0, 1);
+     const endDate = lastTxDate > new Date() ? lastDayOfMonth(lastTxDate) : lastDayOfMonth(new Date());
 
-     // Ensure data points for recent months exist even if no transactions
-     const lastTxDate = transactions.length > 0 ? new Date(transactions.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date + 'T00:00:00') : new Date();
-     let currentDate = transactions.length > 0 ? new Date(sortedMonths[0] + '-01T00:00:00') : new Date(new Date().getFullYear(), 0, 1); // Start from first transaction month or Jan of current year
-     const endDate = lastTxDate > new Date() ? lastTxDate : new Date(); // Go up to today or last transaction date
+     // Add the initial starting point
+     if (monthlyData[`${firstMonthLabel}-Start`]) {
+         finalChartData.push({ ...monthlyData[`${firstMonthLabel}-Start`], month: firstMonthLabel });
+     }
 
+     let lastKnownNetWorth = initialNetWorth;
      while (currentDate <= endDate) {
-         const monthLabel = currentDate.toLocaleString('default', { month: 'short' });
-         const year = currentDate.getFullYear();
-         const monthKey = `${year}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+         const monthLabel = format(currentDate, 'MMM');
+         const monthKey = format(currentDate, 'yyyy-MM');
 
-         if (!monthlyData[monthLabel]) {
-              // Find the previous month's data to carry over net worth
-              let prevMonth = new Date(currentDate);
-              prevMonth.setMonth(prevMonth.getMonth() - 1);
-              const prevLabel = prevMonth.toLocaleString('default', { month: 'short' });
-              const prevNetWorth = monthlyData[prevLabel]?.netWorth ?? (monthlyData[`${prevLabel}-Start`]?.netWorth ?? 0);
-
-             monthlyData[monthLabel] = {
+         if (monthlyData[monthLabel] && monthlyData[monthLabel].month !== `${firstMonthLabel}-Start`) {
+            finalChartData.push(monthlyData[monthLabel]);
+            lastKnownNetWorth = monthlyData[monthLabel].netWorth;
+         } else if (!monthlyData[monthLabel] && finalChartData.length > 0) {
+             // Month exists in range but had no transactions, carry forward net worth
+             finalChartData.push({
                  month: monthLabel,
                  income: 0,
                  expenses: 0,
-                 netWorth: prevNetWorth, // Carry over previous net worth if no transactions
-             };
+                 netWorth: lastKnownNetWorth, // Carry over last known net worth
+             });
          }
          currentDate.setMonth(currentDate.getMonth() + 1);
      }
 
-
-    // Sort final data for chart rendering
-    const chartData = Object.values(monthlyData).sort((a, b) => {
-         // Handle 'Month-Start' entries correctly
-         const dateA = new Date(a.month.replace('-Start', '') + ' 1, 2024'); // Assuming 2024 for sorting
-         const dateB = new Date(b.month.replace('-Start', '') + ' 1, 2024');
-         if (a.month.includes('-Start')) dateA.setDate(0); // Put start at beginning
-         if (b.month.includes('-Start')) dateB.setDate(0);
-        return dateA.getTime() - dateB.getTime();
-    });
-
-     // Remove the potentially duplicate start entry if first month has data
-    // if (chartData.length > 1 && chartData[1].month === firstMonthKey?.substring(0, 3)) {
-    //     chartData.shift(); // Remove the synthetic start if the first month exists
-    // }
+    // --- Calculate Expense Breakdown for the *Current* Month ---
+    const currentMonthKey = format(new Date(), 'yyyy-MM');
+    const currentMonthExpensesByCategory = monthlyExpenseByCategory[currentMonthKey] || {};
+    const expenseBreakdown = Object.entries(currentMonthExpensesByCategory)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value); // Sort descending by value
 
 
-    return chartData.map(d => ({...d, month: d.month.replace('-Start', '')})); // Clean up labels
+    return {
+        monthlyChartData: finalChartData.filter(d => d.month !== `${firstMonthLabel}-Start`), // Exclude the start point for line chart
+        expenseBreakdown,
+    };
 };
 
 // --- End Helper Functions ---
 
 
 // Chart Configuration
-const chartConfig = {
+const chartConfigNetWorth = {
   netWorth: { label: 'Net Worth', color: 'hsl(var(--chart-1))' },
-  expenses: { label: 'Expenses', color: 'hsl(var(--chart-2))' },
-  budget: { label: 'Budget', color: 'hsl(var(--destructive))' }, // Use destructive color for budget line
 };
-
-// Custom Tooltip for Charts
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload; // Access the full data point payload
-    const value = payload[0].value;
-    const name = payload[0].name;
-
-    return (
-      <div className="rounded-lg border bg-background p-2 shadow-sm text-sm">
-        {label && <p className="font-medium mb-1">{label}</p>}
-        {name === 'netWorth' && <p className="text-muted-foreground">{`Net Worth: R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}</p>}
-        {name === 'expenses' && <p className="text-muted-foreground">{`Expenses: R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}</p>}
-        {/* Add other potential tooltips here */}
-      </div>
-    );
-  }
-  return null;
+const chartConfigExpenses = {
+  expenses: { label: 'Expenses', color: 'hsl(var(--chart-2))' },
+  budget: { label: 'Budget', color: 'hsl(var(--destructive))' },
+};
+const chartConfigPie = (expenseBreakdown: {name: string; value: number}[]) => {
+   const config: Record<string, { label: string; color: string }> = {};
+   const colors = [
+       'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
+       'hsl(var(--chart-4))', 'hsl(var(--chart-5))',
+       // Add more distinct colors if needed
+       'hsl(195 53% 79%)', 'hsl(173 57% 57%)', 'hsl(32 95% 66%)', 'hsl(263 60% 64%)'
+   ];
+   expenseBreakdown.forEach((item, index) => {
+       config[item.name] = { label: item.name, color: colors[index % colors.length] };
+   });
+   return config;
 };
 
 
@@ -282,7 +302,7 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = React.useState<Transaction[]>(initialTransactions);
   const [categories, setCategories] = React.useState<Category[]>(initialCategories);
   const [savingsGoals, setSavingsGoals] = React.useState<SavingsGoal[]>(initialSavingsGoals);
-  const [monthlyBudget, setMonthlyBudget] = React.useState<number>(2000); // Default budget
+  const [monthlyBudget, setMonthlyBudget] = React.useState<number>(2500); // Default budget increased
   const [isBudgetModalOpen, setIsBudgetModalOpen] = React.useState(false);
   const [tempBudget, setTempBudget] = React.useState<number | string>(monthlyBudget);
   const [chartType, setChartType] = React.useState<'netWorth' | 'expenses'>('netWorth');
@@ -291,16 +311,19 @@ export default function DashboardPage() {
   // Derived Data Calculations using useMemo
   const netUnallocatedCash = React.useMemo(() => calculateUnallocatedCash(transactions, savingsGoals, categories), [transactions, savingsGoals, categories]);
   const totalSavedInGoals = React.useMemo(() => savingsGoals.reduce((sum, goal) => sum + goal.amount_saved, 0), [savingsGoals]);
-  const currentNetWorth = netUnallocatedCash + totalSavedInGoals;
 
-  const monthlyChartData = React.useMemo(() => calculateMonthlyData(transactions, categories, savingsGoals), [transactions, categories, savingsGoals]);
+
+  const { monthlyChartData, expenseBreakdown } = React.useMemo(() => calculateMonthlyData(transactions, categories, savingsGoals), [transactions, categories, savingsGoals]);
+
+  const currentNetWorth = monthlyChartData.length > 0 ? monthlyChartData[monthlyChartData.length - 1].netWorth : (netUnallocatedCash + totalSavedInGoals); // Use calculated EOM or initial if no data
 
   // Extract latest month's summary data
-  const latestMonthData = monthlyChartData.length > 0 ? monthlyChartData[monthlyChartData.length - 1] : { income: 0, expenses: 0 };
+  const currentMonthDate = new Date();
+  const currentMonthLabel = format(currentMonthDate, 'MMM');
+  const latestMonthData = monthlyChartData.find(d => d.month === currentMonthLabel) || { income: 0, expenses: 0 };
   const netThisMonth = latestMonthData.income - latestMonthData.expenses;
 
-  // TODO: Replace dummy TLDR logic with actual summary/AI generation
-  const monthlySummaryTldr = `Net this month: R$ ${netThisMonth.toFixed(2)}. Income: R$ ${latestMonthData.income.toFixed(2)}, Expenses: R$ ${latestMonthData.expenses.toFixed(2)}.`;
+  const monthlySummaryTldr = `Net this month: R$ ${netThisMonth.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Income: R$ ${latestMonthData.income.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, Expenses: R$ ${latestMonthData.expenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`;
 
 
   // --- Budget Modal Handlers ---
@@ -321,6 +344,10 @@ export default function DashboardPage() {
       }
   };
   // --- End Budget Modal Handlers ---
+
+   // Config for Pie Chart
+   const pieConfig = React.useMemo(() => chartConfigPie(expenseBreakdown), [expenseBreakdown]);
+   const totalCurrentMonthExpenses = expenseBreakdown.reduce((sum, item) => sum + item.value, 0);
 
 
   return (
@@ -377,65 +404,130 @@ export default function DashboardPage() {
          </Card>
       </div>
 
-      {/* Charts Area */}
-      <Card>
-         <CardHeader className="flex flex-row items-center justify-between pb-2">
-             <div>
-                 <CardTitle>{chartType === 'netWorth' ? 'Net Worth Over Time' : 'Monthly Expenses vs Budget'}</CardTitle>
-                 <CardDescription>Visualize your financial trends.</CardDescription>
-             </div>
-             {/* Chart Type Toggle */}
-             <Select value={chartType} onValueChange={(value) => setChartType(value as 'netWorth' | 'expenses')}>
-                 <SelectTrigger className="w-[180px] h-8 text-xs">
-                     <SelectValue placeholder="Select Chart Type" />
-                 </SelectTrigger>
-                 <SelectContent>
-                     <SelectItem value="netWorth">Net Worth</SelectItem>
-                     <SelectItem value="expenses">Expenses vs Budget</SelectItem>
-                 </SelectContent>
-             </Select>
-         </CardHeader>
-         <CardContent className="h-[350px] p-0 pl-2 pr-4 pb-2">
-             <ChartContainer config={chartConfig} className="h-full w-full">
-                 <ResponsiveContainer width="100%" height="100%">
-                     <LineChart data={monthlyChartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
-                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                         <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `R$${value / 1000}k`} domain={['auto', 'auto']} />
-                         <RechartsTooltip cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1, strokeDasharray: '3 3' }} content={<CustomTooltip />} />
-                         {chartType === 'netWorth' && (
-                             <Line type="monotone" dataKey="netWorth" stroke={chartConfig.netWorth.color} strokeWidth={2} dot={false} activeDot={{ r: 6, fill: 'hsl(var(--background))', stroke: chartConfig.netWorth.color }} name="Net Worth"/>
-                         )}
-                         {chartType === 'expenses' && (
-                            <>
-                             <Line type="monotone" dataKey="expenses" stroke={chartConfig.expenses.color} strokeWidth={2} dot={false} activeDot={{ r: 6, fill: 'hsl(var(--background))', stroke: chartConfig.expenses.color }} name="Expenses"/>
-                             {/* Budget Reference Line */}
-                              <ReferenceLine
-                                  y={monthlyBudget}
-                                  label={{ value: `Budget R$${monthlyBudget/1000}k`, position: 'insideTopRight', fill: 'hsl(var(--destructive))', fontSize: 10, dy: -5, dx: -5 }}
-                                  stroke={chartConfig.budget.color}
-                                  strokeDasharray="5 5"
-                                  strokeWidth={1}
-                               />
-                            </>
-                         )}
-                     </LineChart>
-                 </ResponsiveContainer>
-             </ChartContainer>
-         </CardContent>
-      </Card>
+      {/* Main Content Area: Charts and TLDR */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
+        {/* Left Column: Line Chart and TLDR */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
+            {/* Line Chart Card */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <div>
+                        <CardTitle>{chartType === 'netWorth' ? 'Net Worth Over Time' : 'Monthly Expenses vs Budget'}</CardTitle>
+                        <CardDescription>Visualize your financial trends.</CardDescription>
+                    </div>
+                    {/* Chart Type Toggle */}
+                    <Select value={chartType} onValueChange={(value) => setChartType(value as 'netWorth' | 'expenses')}>
+                        <SelectTrigger className="w-[180px] h-8 text-xs">
+                            <SelectValue placeholder="Select Chart Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="netWorth">Net Worth</SelectItem>
+                            <SelectItem value="expenses">Expenses vs Budget</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </CardHeader>
+                <CardContent className="h-[350px] p-0 pl-2 pr-4 pb-2">
+                    <ChartContainer config={chartType === 'netWorth' ? chartConfigNetWorth : chartConfigExpenses} className="h-full w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={monthlyChartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `R$${value / 1000}k`} domain={['auto', 'auto']} />
+                                <ChartTooltip cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1, strokeDasharray: '3 3' }} content={<ChartTooltipContent />} />
+                                {chartType === 'netWorth' && (
+                                    <Line type="monotone" dataKey="netWorth" stroke="var(--color-netWorth)" strokeWidth={2} dot={false} activeDot={{ r: 6, fill: 'hsl(var(--background))', stroke: "var(--color-netWorth)" }} name="Net Worth"/>
+                                )}
+                                {chartType === 'expenses' && (
+                                    <>
+                                    <Line type="monotone" dataKey="expenses" stroke="var(--color-expenses)" strokeWidth={2} dot={false} activeDot={{ r: 6, fill: 'hsl(var(--background))', stroke: "var(--color-expenses)" }} name="Expenses"/>
+                                    {/* Budget Reference Line */}
+                                    <ReferenceLine
+                                        y={monthlyBudget}
+                                        label={{ value: `Budget R$${monthlyBudget/1000}k`, position: 'insideTopRight', fill: 'hsl(var(--destructive))', fontSize: 10, dy: -5, dx: -5 }}
+                                        stroke="var(--color-budget)"
+                                        strokeDasharray="5 5"
+                                        strokeWidth={1}
+                                        ifOverflow="visible" // Ensure label is visible even if budget is off-chart
+                                    />
+                                    </>
+                                )}
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </ChartContainer>
+                </CardContent>
+            </Card>
 
-      {/* Monthly TL;DR */}
-      <Card>
-        <CardHeader>
-             <CardTitle>Monthly TL;DR</CardTitle>
-             <CardDescription>A quick summary of the last calculated month's finances.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">{monthlySummaryTldr}</p>
-        </CardContent>
-      </Card>
+            {/* Monthly TL;DR */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Monthly TL;DR</CardTitle>
+                    <CardDescription>A quick summary of the last calculated month's finances.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                <p className="text-sm text-muted-foreground">{monthlySummaryTldr}</p>
+                </CardContent>
+            </Card>
+        </div>
+
+        {/* Right Column: Expense Breakdown Donut Chart */}
+        <div className="lg:col-span-1">
+             <Card className="flex flex-col h-full"> {/* Ensure card takes full height */}
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <PieChartIcon className="h-5 w-5" /> Expense Breakdown (This Month)
+                    </CardTitle>
+                    <CardDescription>Spending by category for {format(new Date(), 'MMMM yyyy')}. Total: R$ {totalCurrentMonthExpenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 pb-0"> {/* Allow content to grow */}
+                     {expenseBreakdown.length > 0 ? (
+                        <ChartContainer
+                            config={pieConfig}
+                            className="mx-auto aspect-square max-h-[300px]"
+                        >
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
+                                    <Pie
+                                        data={expenseBreakdown}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        innerRadius={60}
+                                        strokeWidth={5}
+                                    >
+                                       {expenseBreakdown.map((entry, index) => (
+                                         <Cell key={`cell-${index}`} fill={pieConfig[entry.name]?.color || '#ccc'} />
+                                       ))}
+                                    </Pie>
+                                </PieChart>
+                             </ResponsiveContainer>
+                        </ChartContainer>
+                     ) : (
+                       <div className="flex items-center justify-center h-full text-muted-foreground text-center p-4">
+                         No expense data for this month yet.
+                       </div>
+                     )}
+                </CardContent>
+                <CardContent className="pb-4 pt-2"> {/* Legend area */}
+                    {expenseBreakdown.length > 0 && (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center text-xs text-muted-foreground">
+                            {expenseBreakdown.map((item) => (
+                                <div key={item.name} className="flex items-center gap-1.5">
+                                    <span
+                                        className="h-2.5 w-2.5 rounded-full"
+                                        style={{ backgroundColor: pieConfig[item.name]?.color }}
+                                    />
+                                    {item.name} (R$ {item.value.toFixed(2)})
+                                </div>
+                            ))}
+                        </div>
+                     )}
+                </CardContent>
+            </Card>
+        </div>
+
+      </div>
+
 
       {/* Set Budget Modal */}
        <Dialog open={isBudgetModalOpen} onOpenChange={setIsBudgetModalOpen}>
@@ -457,7 +549,7 @@ export default function DashboardPage() {
                           value={tempBudget}
                           onChange={(e) => setTempBudget(e.target.value)}
                           className="col-span-3"
-                          placeholder="e.g., 2000"
+                          placeholder="e.g., 2500"
                           step="10"
                           min="0"
                       />
@@ -475,6 +567,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-// Removed Pie Chart - Replaced with Expenses Line Chart + Budget
-// Removed Best Saving Month Card - Replaced with Net Worth Card
