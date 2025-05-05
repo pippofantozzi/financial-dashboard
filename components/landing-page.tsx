@@ -122,7 +122,7 @@ export default function LandingPage() {
           >
             <div className="font-geist-sans max-w-lg px-4 text-center text-xl font-semibold leading-relaxed text-teal-800 dark:text-teal-100 md:text-2xl tracking-tight">
               <span className="block mb-6 font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-green-400 drop-shadow-md">
-                A Elite paga milhões para ter um time cuidando do seu patrimonio e seus gastos mensais. Que tal ser a nossa vez?
+                É muita coisa para você cuidar. Você merece mais. Não tem tempo para isso.
               </span>
               <span className="block mb-6 font-bold underline decoration-green-400/60 decoration-2 underline-offset-4">
                 Uma inteligência financeira personalizada <span className="bg-gradient-to-r from-teal-500 to-green-400 bg-clip-text text-transparent">que cuida do seu dinheiro</span>, otimiza seus investimentos e amplia seu patrimônio mês após mês.
