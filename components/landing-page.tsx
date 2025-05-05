@@ -69,7 +69,7 @@ export default function LandingPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.0, duration: 0.5 }}
           >
-            Track expenses, gain insights, and achieve your financial goals with our intuitive, AI-powered dashboard.
+            Controle seus gastos, ganhe clareza e alcance seus objetivos financeiros com nosso painel intuitivo e inteligente por IA.
           </motion.p>
 
           {/* CTA Buttons with animation and improved styling */}
@@ -81,12 +81,12 @@ export default function LandingPage() {
           >
             <SignUpButton mode="modal">
               <button className="transform rounded-lg bg-gradient-to-r from-teal-600 to-green-500 px-8 py-3 text-lg font-semibold text-white shadow-lg transition-transform duration-200 ease-in-out hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-black">
-                Get Started Free
+                Comece Gratuitamente
               </button>
             </SignUpButton>
             <SignInButton mode="modal">
               <button className="transform rounded-lg border border-teal-200 bg-white px-8 py-3 text-lg font-semibold text-teal-700 shadow-md transition-transform duration-200 ease-in-out hover:scale-105 hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-white dark:border-teal-800 dark:bg-slate-800 dark:text-teal-300 dark:hover:bg-slate-700 dark:focus:ring-offset-black">
-                Sign In
+                Entrar
               </button>
             </SignInButton>
           </motion.div>
